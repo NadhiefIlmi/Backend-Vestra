@@ -1,0 +1,298 @@
+openapi: 3.0.3
+info:
+  title: Live Camera AR Virtual Try-On Catalog API
+  version: 1.0.0
+  description: REST API service for clothing catalog metadata and asset references for live AR virtual try-on.
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+paths:
+  /health:
+    get:
+      summary: Liveness check
+      description: Returns service liveness status.
+      responses:
+        '200':
+          description: Service is alive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                        example: UP
+                      time:
+                        type: string
+                        format: date-time
+
+  /ready:
+    get:
+      summary: Readiness check
+      description: Returns service readiness status including database and storage status.
+      responses:
+        '200':
+          description: Service is ready to accept traffic
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                        example: READY
+                      database:
+                        type: string
+                        example: OK
+                      storage:
+                        type: string
+                        example: OK
+
+  /api/v1/clothing:
+    get:
+      summary: List published clothing items
+      description: Returns a paginated list of published clothing items available for virtual try-on.
+      parameters:
+        - name: category
+          in: query
+          required: false
+          description: Filter by garment category (e.g. top)
+          schema:
+            type: string
+            example: top
+        - name: page
+          in: query
+          required: false
+          description: Page number (starts at 1)
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: limit
+          in: query
+          required: false
+          description: Number of items per page (maximum 100)
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          description: List of clothing items
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ClothingItem'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/clothing/{id}:
+    get:
+      summary: Get clothing item by ID
+      description: Returns detail and transform metadata for a single published clothing item.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Unique clothing identifier
+          schema:
+            type: string
+            example: shirt-basic-black
+      responses:
+        '200':
+          description: Clothing item detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ClothingItem'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  schemas:
+    AnchorConfig:
+      type: object
+      required:
+        - x
+        - y
+      properties:
+        x:
+          type: number
+          format: double
+          description: Normalized X anchor position (0.0 - 1.0)
+          example: 0.5
+        y:
+          type: number
+          format: double
+          description: Normalized Y anchor position (0.0 - 1.0)
+          example: 0.16
+
+    OffsetConfig:
+      type: object
+      required:
+        - x
+        - y
+      properties:
+        x:
+          type: number
+          format: double
+          description: Horizontal pixel offset
+          example: 0
+        y:
+          type: number
+          format: double
+          description: Vertical pixel offset
+          example: 0
+
+    AssetMetadata:
+      type: object
+      required:
+        - anchor
+        - referenceWidth
+        - scaleMultiplier
+        - rotationOffset
+        - offset
+      properties:
+        anchor:
+          $ref: '#/components/schemas/AnchorConfig'
+        referenceWidth:
+          type: integer
+          description: Asset baseline reference width in pixels
+          example: 1000
+        scaleMultiplier:
+          type: number
+          format: double
+          description: Fitting scale multiplier factor
+          example: 1.0
+        rotationOffset:
+          type: number
+          format: double
+          description: Fixed rotation offset in degrees
+          example: 0
+        offset:
+          $ref: '#/components/schemas/OffsetConfig'
+
+    ClothingItem:
+      type: object
+      required:
+        - id
+        - name
+        - category
+        - thumbnailUrl
+        - assetUrl
+        - assetMetadata
+        - status
+      properties:
+        id:
+          type: string
+          example: shirt-basic-black
+        name:
+          type: string
+          example: Classic Black T-Shirt
+        description:
+          type: string
+          example: Kaos hitam katun combed 30s premium dengan fitting regular modern.
+        category:
+          type: string
+          example: top
+        thumbnailUrl:
+          type: string
+          example: /assets/clothing/shirt-black-thumb.webp
+        assetUrl:
+          type: string
+          example: /assets/clothing/shirt-black.png
+        assetMetadata:
+          $ref: '#/components/schemas/AssetMetadata'
+        status:
+          type: string
+          enum: [published, draft, archived]
+          example: published
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    PaginationMeta:
+      type: object
+      required:
+        - page
+        - limit
+        - total
+      properties:
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 20
+        total:
+          type: integer
+          example: 3
+
+    ErrorDetail:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          example: NOT_FOUND
+        message:
+          type: string
+          example: Item pakaian tidak ditemukan
+        details:
+          type: object
+
+  responses:
+    BadRequestError:
+      description: Invalid query or path parameter
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                $ref: '#/components/schemas/ErrorDetail'
+    NotFoundError:
+      description: Requested resource was not found
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                $ref: '#/components/schemas/ErrorDetail'
+    InternalServerError:
+      description: Server error occurred
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                $ref: '#/components/schemas/ErrorDetail'
+
